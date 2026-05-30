@@ -1,0 +1,272 @@
+# Simulation 1 
+# Author: Deon T. Benton
+
+proc mainSim_withoutNoise {} {
+	proc mSim {netName lrSalient lrNonSalient wdSalient wdNonSalient} {
+		addNet $netName 
+
+		# input groups
+		addGroup Person_IN 24 INPUT 
+		addGroup Clothing_Item_IN 6 INPUT
+		addGroup Sleeve_Length_IN 6 INPUT 
+		addGroup Overall_Length_IN 6 INPUT 
+		addGroup Constant_IN 6 INPUT 
+		addGroup Label_IN 2 INPUT 
+		
+	
+		# hidden group (# there are necessarily fewer hidden units than there are input and output units)
+		addGroup hidden 50 
+		
+		# output group
+		addGroup Person_OUT 24 OUTPUT 
+		addGroup Clothing_Item_OUT 6 OUTPUT  
+		addGroup Sleeve_Length_OUT 6 OUTPUT
+		addGroup Overall_Length_OUT 6 OUTPUT 
+		addGroup Constant_OUT 6 OUTPUT
+		addGroup Label_OUT 2 OUTPUT
+
+		# connect groups (input -> hidden -> output)
+		connectGroups {Person_IN Clothing_Item_IN Constant_IN Label_IN} hidden {Person_OUT Clothing_Item_OUT Constant_OUT Label_OUT} 
+		
+		connectGroups Sleeve_Length_IN hidden Sleeve_Length_OUT -type salientFeature
+		connectGroups Overall_Length_IN hidden Overall_Length_OUT -type nonsalientFeature
+		
+		setObj postExampleProc {setLinkValues learningRate 0.02 -type salientFeature 
+		setLinkValues learningRate 0.02 -type nonsalientFeature 
+		setLinkValues weightDecay 0 -type salientFeature 
+		setLinkValues weightDecay 0 -type nonsalientFeature}
+		
+		
+		deleteGroups bias
+		
+
+		# training examples
+		loadExamples training.ex -e PERMUTED
+		loadExamples testing.ex 
+
+		# set learning and display parameters
+		setObj learningRate 0.02
+		setObj momentum	    0
+		setObj batchSize    0
+		setObj numUpdates   10
+		setObj randRange 	0.1
+		
+		# create a function that saves the errors for each example
+  	  proc saveActivations {fname} { 
+      	  set outfile [open $fname a] 
+      	  set num  [getObj currentExample.num]
+      	  set name [getObj currentExample.name]
+       	 puts -nonewline $outfile "$num $name "
+       	 puts $outfile [getObj exampleError]
+       	 close $outfile 
+    	}
+
+        # run testing set and save activations
+        proc testAllFinalActs {fname} { 
+            resetExampleSet [getObj testingSet.name] 
+            set nex [getObj testingSet.numExamples] 
+            for {set i 0} {$i < $nex} {incr i} {
+                doExample -set [getObj testingSet.name]
+                saveActivations $fname 
+            }
+        }
+
+        # simulate multiple "participants"
+        proc testNetwork {n trainingSet trainNum testingSet fname} {
+            for {set i 0} {$i < $n} {incr i} {
+                resetNet 
+                useTrainingSet $trainingSet
+                train $trainNum
+                useTestingSet $testingSet
+                testAllFinalActs $fname
+            }
+        }
+		
+		
+
+        # define training epochs to loop
+        set trainingEpochs [list 1500 1750 2000 2250 2500]
+		set fldr "LRS_${lrSalient}_WDS_${wdSalient}_LRN_${lrNonSalient}_WDN_${wdNonSalient}"
+		
+		set workingdirectory "C:/Users/Deon T. Benton/Desktop/newModelFiles/data/$fldr"
+		file mkdir $workingdirectory
+		cd $workingdirectory
+
+        # define loop
+		foreach trEpoch $trainingEpochs {
+			testNetwork 20 training $trEpoch testing "LRS_${lrSalient}_WDS_${wdSalient}_LRN_${lrNonSalient}_WDN_${wdNonSalient}_TE_${trEpoch}.txt"
+		}
+	}
+	
+		# parameter lists
+		set learningRateSalient [list 0.05 0.055 0.06]
+		set learningRateNonSalient [list 0.0005 0.00045 0.0004] 
+		set weightDecaySalient [list 0.00005 0.000055 0.00006]
+		set weightDecayNonSalient [list 0.05 0.055 0.06]
+
+		# grid search loops
+		foreach lrSalient $learningRateSalient \
+        		lrNonSalient $learningRateNonSalient \
+        		wdSalient $weightDecaySalient \
+        		wdNonSalient $weightDecayNonSalient {
+
+    		set ::lr_salient $lrSalient
+    		set ::lr_nonsalient $lrNonSalient
+
+    		set ::wd_salient $wdSalient
+    		set ::wd_nonsalient $wdNonSalient
+
+    		mSim \
+        		net_${lrSalient}_${lrNonSalient}_${wdSalient}_${wdNonSalient} \
+        		$lrSalient \
+        		$lrNonSalient \
+        		$wdSalient \
+        		$wdNonSalient
+		}
+								
+								
+}
+
+
+proc mainSim_withNoise {} {
+	proc mSim {netName lrSalient lrNonSalient wdSalient wdNonSalient} {
+		addNet ${netName}_noise 
+
+		# input groups
+		addGroup Person_IN 24 INPUT OUT_NOISE
+		addGroup Clothing_Item_IN 6 INPUT OUT_NOISE
+		addGroup Sleeve_Length_IN 6 INPUT OUT_NOISE
+		addGroup Overall_Length_IN 6 INPUT OUT_NOISE
+		addGroup Constant_IN 6 INPUT OUT_NOISE
+		addGroup Label_IN 2 INPUT OUT_NOISE
+		
+		# specify the amount of normalized noise to inject in each input group
+		noiseType Person_IN -range 1
+		noiseType Clothing_Item_IN -range 1
+		noiseType Sleeve_Length_IN -range 1
+		noiseType Overall_Length_IN -range 1
+		noiseType Constant_IN -range 1
+		noiseType Label_IN -range 1
+	
+		# hidden group (# there are necessarily fewer hidden units than there are input and output units)
+		addGroup hidden 50 
+		
+		# output group
+		addGroup Person_OUT 24 OUTPUT 
+		addGroup Clothing_Item_OUT 6 OUTPUT  
+		addGroup Sleeve_Length_OUT 6 OUTPUT
+		addGroup Overall_Length_OUT 6 OUTPUT 
+		addGroup Constant_OUT 6 OUTPUT
+		addGroup Label_OUT 2 OUTPUT
+
+		# connect groups (input -> hidden -> output)
+		connectGroups {Person_IN Clothing_Item_IN Constant_IN Label_IN} hidden {Person_OUT Clothing_Item_OUT Constant_OUT Label_OUT} 
+		
+		connectGroups Sleeve_Length_IN hidden Sleeve_Length_OUT -type salientFeature
+		connectGroups Overall_Length_IN hidden Overall_Length_OUT -type nonsalientFeature
+		
+		setObj postExampleProc {setLinkValues learningRate 0.02 -type salientFeature 
+		setLinkValues learningRate 0.02 -type nonsalientFeature 
+		setLinkValues weightDecay 0 -type salientFeature 
+		setLinkValues weightDecay 0 -type nonsalientFeature}
+		
+		
+		deleteGroups bias
+		
+
+		# training examples
+		loadExamples training.ex -e PERMUTED
+		loadExamples testing.ex 
+
+		# set learning and display parameters
+		setObj learningRate 0.02
+		setObj momentum	    0
+		setObj batchSize    0
+		setObj numUpdates   10
+		setObj randRange 	0.1
+		
+		# create a function that saves the errors for each example
+  	  proc saveActivations {fname} { 
+      	  set outfile [open $fname a] 
+      	  set num  [getObj currentExample.num]
+      	  set name [getObj currentExample.name]
+       	 puts -nonewline $outfile "$num $name "
+       	 puts $outfile [getObj exampleError]
+       	 close $outfile 
+    	}
+
+        # run testing set and save activations
+        proc testAllFinalActs {fname} { 
+            resetExampleSet [getObj testingSet.name] 
+            set nex [getObj testingSet.numExamples] 
+            for {set i 0} {$i < $nex} {incr i} {
+                doExample -set [getObj testingSet.name]
+                saveActivations $fname 
+            }
+        }
+
+        # simulate multiple "participants"
+        proc testNetwork {n trainingSet trainNum testingSet fname} {
+            for {set i 0} {$i < $n} {incr i} {
+                resetNet 
+                useTrainingSet $trainingSet
+                train $trainNum
+                useTestingSet $testingSet
+                testAllFinalActs $fname
+            }
+        }
+		
+		
+
+        # define training epochs to loop
+        set trainingEpochs [list 1500 1750 2000 2250 2500]
+		set fldr "LRS_${lrSalient}_WDS_${wdSalient}_LRN_${lrNonSalient}_WDN_${wdNonSalient}"
+		
+		set workingdirectory "C:/Users/Deon T. Benton/Desktop/newModelFiles/data/$fldr"
+		file mkdir $workingdirectory
+		cd $workingdirectory
+
+        # define loop
+		foreach trEpoch $trainingEpochs {
+			testNetwork 20 training $trEpoch testing "LRS_${lrSalient}_WDS_${wdSalient}_LRN_${lrNonSalient}_WDN_${wdNonSalient}_TE_${trEpoch}_NOISE.txt"
+		}
+	}
+	
+		# parameter lists
+		set learningRateSalient [list 0.05 0.055 0.06]
+		set learningRateNonSalient [list 0.0005 0.00045 0.0004] 
+		set weightDecaySalient [list 0.00005 0.000055 0.00006]
+		set weightDecayNonSalient [list 0.05 0.055 0.06]
+
+		# grid search loops
+		foreach lrSalient $learningRateSalient \
+        		lrNonSalient $learningRateNonSalient \
+        		wdSalient $weightDecaySalient \
+        		wdNonSalient $weightDecayNonSalient {
+
+    		set ::lr_salient $lrSalient
+    		set ::lr_nonsalient $lrNonSalient
+
+    		set ::wd_salient $wdSalient
+    		set ::wd_nonsalient $wdNonSalient
+
+    		mSim \
+        		net_${lrSalient}_${lrNonSalient}_${wdSalient}_${wdNonSalient} \
+        		$lrSalient \
+        		$lrNonSalient \
+        		$wdSalient \
+        		$wdNonSalient
+		}
+								
+								
+}
+
+set modelList [list mainSim_withoutNoise mainSim_withNoise] 
+
+
+foreach ml $modelList {
+    puts "Running $ml..."
+    $ml          ;
+}
+
+
